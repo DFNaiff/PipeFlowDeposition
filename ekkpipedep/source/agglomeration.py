@@ -1,73 +1,94 @@
 # -*- coding: utf-8 -*-
+from typing import Optional
 import warnings
 
 import numpy as np
+import numpy.typing
 from scipy import constants
 
 from . import interactionfunctions
 
 
-KBOLTZ = constants.Boltzmann #J K^-1
+KBOLTZ = constants.Boltzmann  # J K^-1
 
 
-def agglomeration_rate(x,y,
-                      temp,dynamic_viscosity,
-                      kinematic_viscosity,
-                      turbulent_dissipation,
-                      const_turb,
-                      komolgorov_length,
-                      hamacker=None,
-                      permittivity=None,
-                      dl_thickness=None,
-                      phi_dl=None,
-                      vrepr=None,
-                      adjustment_factor=1.0,
-                      interactions=False):
+def agglomeration_rate(x: np.ndarray, y: np.ndarray,
+                       temp: float,
+                       dynamic_viscosity: float,
+                       kinematic_viscosity: float,
+                       turbulent_dissipation: float,
+                       const_turb: float,
+                       komolgorov_length: float,
+                       vrepr: float,
+                       hamaker: Optional[float] = None,
+                       permittivity: Optional[float] = None,
+                       dl_thickness: Optional[float] = None,
+                       phi_dl: Optional[float] = None,
+                       adjustment_factor: float = 1.0,
+                       interactions: bool = False):
     """
-        Calculate deposition rate according to X theory
 
-        :x: Crystal size (m^3)
-        :y: Crystal size (m^3)
-        :temp: Temperature (K)
-        :dynamic_viscosity: Dynamic viscosity (Pa s)
-        :kinematic_viscosity: Kinematic viscosity (m^2 s^-1)
-        :turbulent_dissipation: Turbulent dissipation (J/kg/s)
-        :komolgorov_length: Komolgorov length (m)
-        :hamacker: Hamacker constant (J)
-        :permittivity: Permittivity of water (C V^-1 m^-1)
-        :dl_thickness: Debye length (m)
-        :phi_dl: Electric potential at surface of particle and wall (V)
-        :vrepr: Representative volume for interactions (m^3)
-        :sct: Turbulent Schmidt number (dimensionless)
-        :interactions: Whether to consider interactions (default: False)
-        returns coagulation kernel (m^3/s)
+    Parameters
+    ----------
+    x : np.ndarray
+        Crystal size (m^3).
+    y : np.ndarray
+        Crystal size (m^3).
+    temp : float
+        Temperature (K).
+    dynamic_viscosity : float
+        Dynamic viscosity (Pa s).
+    kinematic_viscosity : float
+        Kinematic viscosity (m2/s).
+    turbulent_dissipation : float
+        Turbulent dissipation (J/kg/s).
+    const_turb : float
+        Turbulent agglomeration constant (dimensionless).
+    komolgorov_length : float
+        Komolgorov length (m).
+    vrepr : float
+        Representative volume of particles (m3).
+    hamaker : Optional[float], optional
+        Hamaker constant (J). The default is None.
+    permittivity of fluid: Optional[float], optional
+        Permittivity (C V^-1 m^-1). The default is None.
+    dl_thickness : Optional[float], optional
+        Debye length (m). The default is None.
+    phi_dl : Optional[float], optional
+        Double layer potential (m). The default is None.
+    adjustment_factor : float, optional
+        Adjustment factor (dimensionless). The default is 1.0.
+    interactions : bool, optional
+        Whether to consider particle-particle interactions. The default is False.
+
+    Returns
+    -------
+    rate : np.ndarray
+        The agglomeration kernel.
+
     """
-    if interactions:
-        assert hamacker is not None
-        assert permittivity is not None
-        assert dl_thickness is not None
-        assert phi_dl is not None
-        assert vrepr is not None
-    rrepr = (3/(4*np.pi)*vrepr)**(1./3) if vrepr is not None else None
+    rrepr = (3/(4*np.pi)*vrepr)**(1./3)
     c_brownian = 2.*KBOLTZ*temp/(3.*dynamic_viscosity)
     rate_brownian = c_brownian*(2 + (x/y)**(1./3) + (y/x)**(1./3))
-    #turbulent coagulation
-    c_turbulent = 3*const_turb*\
+    # turbulent coagulation
+    c_turbulent = 3*const_turb *\
         np.sqrt(turbulent_dissipation/kinematic_viscosity)/(4*np.pi)
     rate_turbulent = c_turbulent*(x**(1./3) + y**(1./3))**3.0
-    dx,dy = 2*(3/(4*np.pi)*x)**(1.0/3),2*(3/(4*np.pi)*y**(1.0/3))
-    soft_constraint = sigmoid(-2*dx/komolgorov_length)*\
-                      sigmoid(-2*dy/komolgorov_length)
+    dx, dy = 2*(3/(4*np.pi)*x)**(1.0/3), 2*(3/(4*np.pi)*y**(1.0/3))
+    soft_constraint = 4*sigmoid(-2*dx/komolgorov_length) * \
+        sigmoid(-2*dy/komolgorov_length)
     rate_turbulent *= soft_constraint
     iwbr = 1.0
     iwt = 1.0
     if interactions:
-        wbr = interactionfunctions.wbrownian(rrepr,hamacker,permittivity,phi_dl,dl_thickness,temp)
-        wt = interactionfunctions.wturbulent(rrepr,hamacker,permittivity,phi_dl,dl_thickness,temp,
-                    dynamic_viscosity,turbulent_dissipation,
-                    kinematic_viscosity,const_turb)
-        if wbr <= 1e-4 or wt <= 1e-4:
-            warnings.warn("Some error in integral calculations. Considering no interaction")
+        wbr = interactionfunctions.brownian_agglomeration_efficiency(
+            rrepr, hamaker, permittivity, phi_dl, dl_thickness, temp)
+        wt = interactionfunctions.turbulent_agglomeration_efficiency(
+            rrepr, hamaker, permittivity, phi_dl, dl_thickness, temp,
+            dynamic_viscosity, turbulent_dissipation, kinematic_viscosity, const_turb)
+        if wbr <= 1e-10 or wt <= 1e-10:
+            warnings.warn(
+                "Some error in integral calculations. Considering no interaction")
             iwbr = 1.0
             iwt = 1.0
         else:
@@ -81,5 +102,5 @@ def agglomeration_rate(x,y,
     return rate
 
 
-def sigmoid(x):
+def sigmoid(x: numpy.typing.ArrayLike) -> numpy.typing.ArrayLike:
     return 1/(1+np.exp(-x))

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from ekkpipedep import StationaryPipeSourceFunction
 
-interface_system = InterfaceSystem(['C', 'Ca', 'Na', 'Cl', 'Mg'], from_elements=True, activity_model="IDEAL")
+interface_system = InterfaceSystem(['C', 'Ca', 'Na', 'Cl', 'Mg'], from_elements=True, activity_model="EXTENDED_DEBYE")
 pipe_source = StationaryPipeSourceFunction(interface_system, 1.0, 1e-2, 298.15, wall_phases=['Calcite'])
 initial_concentrations = {'C':0.065, 'Ca':0.028, 'Na':0.075, 'Cl':0.056, 'Mg':0.020}
 initial_nparticles = 1e3

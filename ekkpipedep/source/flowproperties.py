@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
 """
-A collection of equations for calculating properties o pipe flows
+
+A collection of equations for calculating properties of pipe flows
+
 """
-from typing import Union
+
+from typing import Optional
 
 import numpy as np
 import pyequion2.water_properties
@@ -11,18 +14,20 @@ import pyequion2.water_properties
 
 def reynolds_number(flow_velocity : float,
                     pipe_diameter : float,
-                    TK : float = 298.15): #Dimensionless
+                    TK : float = 298.15,
+                    kinematic_viscosity : Optional[float] = None): #Dimensionless
     """
         Calculates Reynolds number of water from velocity and diameter
     """
-    kinematic_viscosity = pyequion2.water_properties.water_kinematic_viscosity(TK)
+    kinematic_viscosity = kinematic_viscosity or water_kinematic_viscosity(TK)
     return flow_velocity*pipe_diameter/kinematic_viscosity
 
 
 def darcy_friction_factor(flow_velocity : float,
                           pipe_diameter : float,
-                          TK : float = 298.15):
-    reynolds = reynolds_number(flow_velocity, pipe_diameter, TK)
+                          TK : float = 298.15,
+                          kinematic_viscosity : Optional[float] = None):
+    reynolds = reynolds_number(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
     if reynolds < 2300:
         return 64/reynolds
     else: #Blasius
@@ -31,15 +36,19 @@ def darcy_friction_factor(flow_velocity : float,
 
 def shear_velocity(flow_velocity : float,
                    pipe_diameter : float,
-                   TK : float = 298.15):
-    f = darcy_friction_factor(flow_velocity, pipe_diameter, TK)
+                   TK : float = 298.15,
+                   kinematic_viscosity : Optional[float] = None):
+    f = darcy_friction_factor(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
     return np.sqrt(f/8.0)*flow_velocity
 
 
 def shear_length(flow_velocity : float,
                  pipe_diameter : float,
-                 TK : float = 298.15): #m
-    return water_kinematic_viscosity(TK)/shear_velocity(flow_velocity, pipe_diameter, TK)
+                 TK : float = 298.15,
+                 kinematic_viscosity : Optional[float] = None): #m
+    shearv = shear_velocity(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
+    kv = kinematic_viscosity or water_kinematic_viscosity(TK)
+    return kv/shearv
 
 
 def pipe_flux_scale(pipe_diameter : float): #m: cross_area/cross_perimieter
@@ -85,16 +94,18 @@ def water_prandtl_number(TK : float = 298.15):
 def water_nusselt_number(flow_velocity : float,
                          pipe_diameter : float,
                          TKb : float = 298.15,
-                         TKw : float = 298.15): #Dittus-Boelter
+                         TKw : float = 298.15,
+                         kinematic_viscosity : Optional[float] = None): #Dittus-Boelter
     n = 0.4 if TKw > TKb else 0.3
-    return 0.023*reynolds_number(flow_velocity, pipe_diameter, TKb)**(0.8)*\
+    return 0.023*reynolds_number(flow_velocity, pipe_diameter, TKb, kinematic_viscosity)**(0.8)*\
            water_prandtl_number(TKb)**n
 
 
 def turbulent_dissipation(flow_velocity : float,
                           pipe_diameter : float,
-                          TK : float = 298.15): #m^2 s^-3
-    f = darcy_friction_factor(flow_velocity, pipe_diameter, TK)
+                          TK : float = 298.15,
+                          kinematic_viscosity : Optional[float] = None): #m^2 s^-3
+    f = darcy_friction_factor(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
     return f/2*flow_velocity**3/pipe_diameter
 
 
@@ -105,31 +116,37 @@ def vol_flow_rate(flow_velocity : float,
 
 def komolgorov_time(flow_velocity : float,
                     pipe_diameter : float,
-                    TK : float = 298.15): #s
-    nu = water_kinematic_viscosity(TK)
-    tbd = turbulent_dissipation(flow_velocity, pipe_diameter, TK)
+                    TK : float = 298.15,
+                    kinematic_viscosity : Optional[float] = None): #s
+    nu = kinematic_viscosity or water_kinematic_viscosity(TK)
+    tbd = turbulent_dissipation(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
     return np.sqrt(nu/tbd)
 
 
 def komolgorov_length(flow_velocity : float,
                       pipe_diameter : float,
-                      TK : float = 298.15): #m
-    nu = water_kinematic_viscosity(TK)
-    tbd = turbulent_dissipation(flow_velocity, pipe_diameter, TK)
+                      TK : float = 298.15,
+                      kinematic_viscosity : Optional[float] = None): #m
+    nu = kinematic_viscosity or water_kinematic_viscosity(TK)
+    tbd = turbulent_dissipation(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
     return (nu**3/tbd)**(1.0/4)
 
 
 def komolgorov_velocity(flow_velocity : float,
                         pipe_diameter : float,
-                        TK : float = 298.15): #m/s
-    nu = water_kinematic_viscosity(TK)
-    tbd = turbulent_dissipation(flow_velocity, pipe_diameter, TK)
+                        TK : float = 298.15,
+                        kinematic_viscosity : Optional[float] = None): #m/s
+    nu = kinematic_viscosity or water_kinematic_viscosity(TK)
+    tbd = turbulent_dissipation(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
     return (nu*tbd)**(1.0/4)
 
 
 def darcy_weisbach(flow_velocity : float,
                    pipe_diameter : float,
-                   TK : float = 298.15):
-    f = darcy_friction_factor(flow_velocity, pipe_diameter, TK)
-    dpdx = f*water_density(TK)/2.0*flow_velocity**2/pipe_diameter
+                   TK : float = 298.15,
+                   kinematic_viscosity : Optional[float] = None,
+                   flow_density : Optional[float] = None):
+    f = darcy_friction_factor(flow_velocity, pipe_diameter, TK, kinematic_viscosity)
+    flow_density = flow_density or water_density(TK)
+    dpdx = f*flow_density/2.0*flow_velocity**2/pipe_diameter
     return dpdx

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from typing import Tuple
+
 import numpy as np
 
 
@@ -10,8 +12,37 @@ A collection of nucleation helpers
 """
 
 
-def primary_nucleus_size_and_rate(satur, temp, dynamic_viscosity, 
-                                  sigma_app, molec_vol, elem_diam):
+def primary_nucleus_size_and_rate(satur : float,
+                                  temp : float,
+                                  dynamic_viscosity : float, 
+                                  sigma_app : float,
+                                  molec_vol : float,
+                                  elem_diam : float) -> Tuple[float, float]:
+    """
+
+    Parameters
+    ----------
+    satur : float
+        Saturation, defined as IAP/Ksp (unitless).
+    temp : float
+        Temperature (K).
+    dynamic_viscosity : float
+        Dynamic viscosity (Pa s).
+    sigma_app : float
+        Surface energy of nucleating mineral (J/m2).
+    molec_vol : float
+        Volume of elementary molecule (m3).
+    elem_diam : float
+        Diameter of elementary molecule (m3).
+
+    Returns
+    -------
+    nucleus_volume : np.ndarray
+        Volume of nucleus (m3).
+    nucleation_rate : np.ndarray
+        Nucleation rate (#/m3/s)
+
+    """
     if satur <= 1.0: #No nucleation
         return np.pi*(elem_diam**3)/6,0.0
     else:
@@ -26,4 +57,4 @@ def primary_nucleus_size_and_rate(satur, temp, dynamic_viscosity,
         preexp_factor = geometric_factor*nucleus_diff*(molec_vol)**(-5.0/3)
         log_nucleation_rate = np.log(preexp_factor) - exp_factor
         nucleation_rate = np.exp(log_nucleation_rate)
-        return nucleus_volume,nucleation_rate
+        return nucleus_volume, nucleation_rate
