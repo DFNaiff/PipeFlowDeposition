@@ -23,6 +23,7 @@ def particle_deposition_rate(x : np.ndarray,
                              permittivity : Optional[float] = None,
                              dl_thickness : Optional[float] = None,
                              phi_dl : Optional[float] = None,
+                             rcorrection : float = 0.0,
                              adjustment_factor : Optional[float] = 1.0,
                              interactions : Optional[float] = False) -> np.ndarray:
     """
@@ -54,6 +55,8 @@ def particle_deposition_rate(x : np.ndarray,
         Debye length (m). The default is None.
     phi_dl : Optional[float], optional
         Electric potential at surface of particle and wall (V). The default is None
+    rcorrection : float, optional.
+        Hydrodynamic correction for rough surfaces. The default is 0.0.
     interactions : Optional[float], optional
         Whether to consider interactions (default: True)
     
@@ -78,7 +81,7 @@ def particle_deposition_rate(x : np.ndarray,
         wd = interactionfunctions.particle_deposition_efficiency(
                 rrepr,dynamic_viscosity,kinematic_viscosity,shear_velocity,
                 temp,permittivity,phi_dl,dl_thickness,hamaker,
-                y_v,b,sct=sct)
+                y_v,b,sct=sct,rcorrection=rcorrection)
         deposition_rate = d0/(1+wd*d0)
     else:
         wd = 1.0

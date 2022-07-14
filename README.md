@@ -1,6 +1,6 @@
 # Inorganic Scaling 1D Simulator in Python
 
-
+Comprehensive model for scaling of inorganic solids in pipe flows. 
 
 ## Authors
 

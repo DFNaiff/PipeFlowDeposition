@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from typing import List, Union, Callable, Optional, Dict, Any
+from typing import List, Union, Callable, Optional, Dict, Any, Tuple
+import warnings
 
 import numpy as np
 import scipy.integrate
@@ -15,13 +16,54 @@ TemperatureFunction = Callable[[float], float]
 Temperature = Union[TemperatureFunction, float]
 PressureFunction = Callable[[float], float]
 Pressure = Union[PressureFunction, float]
+WallCallable = Union[Callable[..., float]]
+WallReaction = Tuple[Union[WallCallable, str], List[float], Optional[WallCallable]]
+WallReactions = Optional[Dict[str, WallCallable]]
 
 
 class StationaryPipeFlowSolver():
+    """
+    
+    Attributes
+    ----------
+    interface_system : InterfaceSystem
+        InterfaceSystem responsible for chemical calculations
+    flow_velocity : float
+        Flow velocity of system (m/s).
+    pipe_diameter : float
+        Pipe diameter (m).
+    pipe_length : float
+        Pipe length (m).
+    TKb : Temperature, optional
+        Temperature at bulk (K).
+    TKw : Temperature, optional
+        Temperature at bulk (K).
+    pressure : Pressure, optional
+        Pressure at pipe (Pa).
+    pressure_model : str, optional
+        Model for pressure drop.
+    initial_concentrations : Dict[str, float]
+        Initial concentrations in mol/m3.
+    initial_nparticles : float
+        Initial number of particles in #/m3.
+    initial_dparticles : float
+        Initial particle diameter.
+
+    """
     def __init__(self):
         self.interface_system = None
-        self.flow_params = None
-        
+        self.flow_velocity = None
+        self.pipe_diameter = None
+        self.pipe_length = None
+        self.TKb = None
+        self.TKw = None
+        self.pressure = None
+        self.pressure_model = None
+        self.pipe_source = None
+        self.initial_concentrations = None
+        self.initial_nparticles = None
+        self.initial_dparticles = None
+
     def set_equilibrium_system(self, elements : List[str],
                                activity_model : str = "EXTENDED_DEBYE",
                                transport_model : str = "A"):
@@ -64,7 +106,7 @@ class StationaryPipeFlowSolver():
         TKw : Temperature, optional
             Temperature at bulk (K). The default is None.
         pressure : Pressure, optional
-            Pressure at pipe (atm). The default is 1e5.
+            Pressure at pipe (Pa). The default is 1e5.
         pressure_model : str, optional
             Model for pressure drop. The default is 'dw_outlet'.
 
@@ -79,7 +121,9 @@ class StationaryPipeFlowSolver():
         
     def set_pipe_source(self,
                         wall_phases : List[str],
-                        bulk_phases : Optional[List[str]] = None):
+                        bulk_phases : Optional[List[str]] = None,
+                        wall_reactions : WallReactions = None,
+                        nmoments : int = 2):
         """
 
         Parameters
@@ -88,10 +132,19 @@ class StationaryPipeFlowSolver():
             Mineral phases at the wall.
         bulk_phases : Optional[List[str]], optional
             Mineral phases at the wall. The default is None.
+        wall_reactions : WallReactions, optional
+            DESCRIPTION. The default is None.
+        nmoments: int, optional
+            Number of moments to be considered. The default is 2.
 
         """
+        assert(self.interface_system is not None)
+        assert(self.flow_velocity is not None)
         if not bulk_phases:
             bulk_phases = wall_phases
+        if nmoments%2 != 0:
+            warnings.warn("Number of moments must be even. Setting to nmoments - 1")
+            nmoments = nmoments - 1
         pipe_source = StationaryPipeSourceFunction(self.interface_system,
                                                    self.flow_velocity,
                                                    self.pipe_diameter,
@@ -101,7 +154,9 @@ class StationaryPipeFlowSolver():
                                                    pipe_length=self.pipe_length,
                                                    pressure=self.pressure,
                                                    wall_phases=wall_phases,
-                                                   bulk_phases=bulk_phases)
+                                                   wall_reactions=wall_reactions,
+                                                   bulk_phases=bulk_phases,
+                                                   nmoments=nmoments)
         self.pipe_source = pipe_source
 
     def set_initial_values(self,
@@ -140,6 +195,8 @@ class StationaryPipeFlowSolver():
             Statistics of ODE solver.
 
         """
+        assert(self.pipe_source is not None)
+        assert(self.initial_concentrations is not None)
         ode_params = dict()
         solver = scipy.integrate.ode(self.pipe_source.f)
         solver.set_integrator('vode',
@@ -169,7 +226,8 @@ class StationaryPipeFlowSolver():
     @property
     def recorder(self) -> Dict[str, Any]:
         """
-
+        Get the recorded data for computation
+        
         Returns
         -------
         Dict[str, Any]
@@ -185,8 +243,8 @@ class StationaryPipeFlowSolver():
 
         Returns
         -------
-        TYPE
-            DESCRIPTION.
+        interpolator.ResultInterpolator
+            The interpolator class.
 
         """
         return interpolator.ResultInterpolator(self.recorder)

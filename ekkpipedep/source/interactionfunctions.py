@@ -35,7 +35,8 @@ def particle_deposition_efficiency(radius : float,
                                    hamaker : Optional[float],
                                    max_interaction_distance : float,
                                    bturb : float = 9.5*1e-4,
-                                   sct : float = 1.0) -> float:
+                                   sct : float = 1.0,
+                                   rcorrection : float = 0.0) -> float:
     """
 
     Parameters
@@ -64,7 +65,9 @@ def particle_deposition_efficiency(radius : float,
         Wall turbulent viscosity constant (dimensionless). The default is 9.5*1e-4.
     sct : float, optional
         Schmidt number (dimensionless). The default is 1.0.
-
+    rcorrection : float, optional
+        Hydrodynamic correction for rough surfaces. The default is 0.0.
+    
     Returns
     -------
     float
@@ -89,7 +92,7 @@ def particle_deposition_efficiency(radius : float,
         potential_term = potential_function(y)/(KBOLTZ*temp)
         radius_term = (1+diffusion_ratio*(y+radius)**3)
         exp_term = potential_term/radius_term - inner_integral
-        hydro_term = gfunction_particle_wall(y/radius)
+        hydro_term = gfunction_particle_wall(y/radius, rcorrection)
         outer_radius_term = (1/(1+diffusion_ratio*(y+radius)**3))
         integrand = hydro_term/brownian_diffusion_term*outer_radius_term*np.exp(exp_term)
         return integrand
@@ -382,7 +385,7 @@ def double_layer_potential_wall(dist : float,
 
 
 
-def gfunction_particle_wall(s : float) -> float:
+def gfunction_particle_wall(s : float, rcorrection : float = 0.0) -> float:
     """
     Calculate the G(s) function for particle-wall hydrodynamic interaction
     
@@ -390,14 +393,17 @@ def gfunction_particle_wall(s : float) -> float:
     ----------
     s : float
         Distance between the particles divided by their radius.
-
+    rcorrection : float, optional
+        Correction for rough surfaces. The default value is 0.0.
     Returns
     -------
     float
         G(s) value.
 
     """
-    return 1 + 1/(s) + 0.128/np.sqrt(s)
+    s = s + rcorrection
+    #s = s + 1 #TODO: Either remove or justify
+    return 1 + (1/(s) + 0.128/np.sqrt(s))
 
 
 def potential_tilde_particle_particle(s : float,

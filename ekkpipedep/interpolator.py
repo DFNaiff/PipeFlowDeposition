@@ -19,7 +19,7 @@ class ResultInterpolator():
         except:
             raise KeyError("Cannot find item")
         x, y = map(np.array,
-                   zip(*[(t, self.get_value(d, item)) for t, d in self.recorder.items()]))
+                   zip(*[(xx, self.get_value(d, item)) for xx, d in self.recorder.items()]))
         return interpolate.interp1d(x, y, axis=0, fill_value="extrapolate")(xval)
     
     def get_value(self, d : Dict[str, np.typing.ArrayLike], k : str):

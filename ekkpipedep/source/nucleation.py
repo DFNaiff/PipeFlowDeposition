@@ -44,7 +44,7 @@ def primary_nucleus_size_and_rate(satur : float,
 
     """
     if satur <= 1.0: #No nucleation
-        return np.pi*(elem_diam**3)/6,0.0
+        return np.pi*(elem_diam**3)/6, 0.0
     else:
         #Nucleus diamater and volume, avoiding non-physical volume
         nucleus_diameter = 4*molec_vol*sigma_app/(constants.KBOLTZ*temp*np.log(satur))
