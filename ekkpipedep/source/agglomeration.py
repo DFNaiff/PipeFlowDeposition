@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-from typing import Optional
+from typing import Optional, Tuple, Callable
 import warnings
 
 import numpy as np
 import numpy.typing
 from scipy import constants
+from scipy import interpolate
+
 
 from . import interactionfunctions
+from . import auxfunctions
 
 
 KBOLTZ = constants.Boltzmann  # J K^-1
@@ -75,9 +78,11 @@ def agglomeration_rate(x: np.ndarray, y: np.ndarray,
         np.sqrt(turbulent_dissipation/kinematic_viscosity)/(4*np.pi)
     rate_turbulent = c_turbulent*(x**(1./3) + y**(1./3))**3.0
     dx, dy = 2*(3/(4*np.pi)*x)**(1.0/3), 2*(3/(4*np.pi)*y**(1.0/3))
-    soft_constraint = 4*sigmoid(-2*dx/komolgorov_length) * \
-        sigmoid(-2*dy/komolgorov_length)
-    rate_turbulent *= soft_constraint
+#    soft_constraint = 4*sigmoid(-2*dx/komolgorov_length) * \
+#        sigmoid(-2*dy/komolgorov_length)
+    soft_constraint = auxfunctions.smooth_transition(dx, komolgorov_length, komolgorov_length/4)*\
+                      auxfunctions.smooth_transition(dy, komolgorov_length, komolgorov_length/4)
+    #rate_turbulent *= soft_constraint
     iwbr = 1.0
     iwt = 1.0
     if interactions:
@@ -102,5 +107,35 @@ def agglomeration_rate(x: np.ndarray, y: np.ndarray,
     return rate
 
 
-def sigmoid(x: numpy.typing.ArrayLike) -> numpy.typing.ArrayLike:
-    return 1/(1+np.exp(-x))
+def make_interaction_memoizers(rlow : float, rhigh : float, nsteps : int,
+                               hamaker : Optional[float], permittivity : Optional[float],
+                               phi_dl : Optional[float], dl_thickness : Optional[float],
+                               temp : float,
+                               dynamic_viscosity : float,
+                               turbulent_dissipation : float,
+                               kinematic_viscosity : float,
+                               const_turb : float
+                               ) -> Tuple[Callable[float, float], Callable[float, float]]:
+    rsteps = np.logspace(np.log10(rlow), np.log10(rhigh), nsteps)
+    iwbrs = []
+    iwts = []
+    for r in rsteps:
+        wbr = interactionfunctions.brownian_agglomeration_efficiency(
+            r, hamaker, permittivity, phi_dl, dl_thickness, temp)
+        wt = interactionfunctions.turbulent_agglomeration_efficiency(
+            r, hamaker, permittivity, phi_dl, dl_thickness, temp,
+            dynamic_viscosity, turbulent_dissipation, kinematic_viscosity, const_turb)
+        if wbr <= 1e-10 or wt <= 1e-10:
+            warnings.warn(
+                "Some error in integral calculations. Considering no interaction")
+            iwbr = 1.0
+            iwt = 1.0
+        else:
+            iwbr = 1/wbr
+            iwt = 1/wt
+        iwbrs.append(iwbr)
+        iwt.append(iwt)
+    iwbrs, iwts = map(np.array, [iwbrs, iwts])
+    iwbrfunc = interpolate.interp1d(rsteps, iwbrs, axis=0, fill_value="extrapolate")
+    iwtfunc = interpolate.interp1d(rsteps, iwts, axis=0, fill_value="extrapolate")
+    return iwbrfunc, iwtfunc

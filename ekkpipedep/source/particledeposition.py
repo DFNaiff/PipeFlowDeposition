@@ -5,7 +5,7 @@ import numpy as np
 from scipy import constants
 
 from . import interactionfunctions
-from . import integrals
+from . import auxfunctions
 
 
 KBOLTZ = constants.Boltzmann #J K^-1
@@ -15,6 +15,7 @@ def particle_deposition_rate(x : np.ndarray,
                              temp : float,
                              dynamic_viscosity : float,
                              kinematic_viscosity : float,
+                             komolgorov_length : float,
                              shear_velocity : float,
                              bturb : float,
                              vrepr : float,
@@ -24,6 +25,8 @@ def particle_deposition_rate(x : np.ndarray,
                              dl_thickness : Optional[float] = None,
                              phi_dl : Optional[float] = None,
                              rcorrection : float = 0.0,
+                             k_turbophoresis : float = 0.0,
+                             komolgorov_adjustment : float = 0.25,
                              adjustment_factor : Optional[float] = 1.0,
                              interactions : Optional[float] = False) -> np.ndarray:
     """
@@ -39,6 +42,8 @@ def particle_deposition_rate(x : np.ndarray,
         Dynamic viscosity (Pa s)
     kinematic_viscosity : float
         Kinematic viscosity (m^2 s^-1)
+    komolgorov_length : float
+        Komolgorov length (m)
     shear_velocity : float
         Shear velocity (m/s)
     bturb : float
@@ -72,20 +77,29 @@ def particle_deposition_rate(x : np.ndarray,
     r = (3/(4*np.pi)*x)**(1.0/3)
     dbr = (KBOLTZ*temp)/(6*np.pi*dynamic_viscosity*r)
     kappa = b*shear_velocity**3/(kinematic_viscosity**2*sct)
-    d0 = 1/integrals.integral2_0inf(dbr,kappa,r)
+    d0 = 1/auxfunctions.integral2_0inf(dbr,kappa,r)
 
     #Calculate interactions
     wall_length = kinematic_viscosity/shear_velocity
     y_v = 5*wall_length
     if interactions:
-        wd = interactionfunctions.particle_deposition_efficiency(
-                rrepr,dynamic_viscosity,kinematic_viscosity,shear_velocity,
-                temp,permittivity,phi_dl,dl_thickness,hamaker,
-                y_v,b,sct=sct,rcorrection=rcorrection)
-        deposition_rate = d0/(1+wd*d0)
+#        wd = interactionfunctions.particle_deposition_efficiency(
+#                rrepr,dynamic_viscosity,kinematic_viscosity,shear_velocity,
+#                temp,permittivity,phi_dl,dl_thickness,hamaker,
+#                y_v,b,sct=sct,rcorrection=rcorrection)
+        wdf = lambda rrepr : interactionfunctions.particle_deposition_efficiency(
+                 rrepr,dynamic_viscosity,kinematic_viscosity,shear_velocity,
+                 temp,permittivity,phi_dl,dl_thickness,hamaker,
+                 y_v,b,sct=sct,rcorrection=rcorrection)
+        wd = np.array([wdf(rr) for rr in r])
+        diffusional_deposition_rate = d0/(1+wd*d0)
     else:
         wd = 1.0
-        deposition_rate = d0
+        diffusional_deposition_rate = d0
+    turbophoretic_deposition_rate = k_turbophoresis*shear_velocity
+    transition_factor = auxfunctions.smooth_transition(2*r, komolgorov_length,
+                                                       komolgorov_length*komolgorov_adjustment)
+    deposition_rate = transition_factor*diffusional_deposition_rate + \
+                      (1 - transition_factor)*turbophoretic_deposition_rate
     deposition_rate *= adjustment_factor
     return deposition_rate
-

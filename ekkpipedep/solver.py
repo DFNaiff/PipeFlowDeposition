@@ -63,7 +63,7 @@ class StationaryPipeFlowSolver():
         self.initial_concentrations = None
         self.initial_nparticles = None
         self.initial_dparticles = None
-
+        
     def set_equilibrium_system(self, elements : List[str],
                                activity_model : str = "EXTENDED_DEBYE",
                                transport_model : str = "A"):
@@ -123,7 +123,8 @@ class StationaryPipeFlowSolver():
                         wall_phases : List[str],
                         bulk_phases : Optional[List[str]] = None,
                         wall_reactions : WallReactions = None,
-                        nmoments : int = 2):
+                        nmoments : int = 2,
+                        length_based_formulation : bool = False):
         """
 
         Parameters
@@ -136,7 +137,10 @@ class StationaryPipeFlowSolver():
             DESCRIPTION. The default is None.
         nmoments: int, optional
             Number of moments to be considered. The default is 2.
-
+        length_based_formulation : bool, optional
+            Whether we are using a length-based formulation for
+            the method of moments. False means a volume-based formulation.
+            The default is False.
         """
         assert(self.interface_system is not None)
         assert(self.flow_velocity is not None)
@@ -156,7 +160,8 @@ class StationaryPipeFlowSolver():
                                                    wall_phases=wall_phases,
                                                    wall_reactions=wall_reactions,
                                                    bulk_phases=bulk_phases,
-                                                   nmoments=nmoments)
+                                                   nmoments=nmoments,
+                                                   length_based_formulation=length_based_formulation)
         self.pipe_source = pipe_source
 
     def set_initial_values(self,

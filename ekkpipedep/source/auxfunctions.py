@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import numpy as np
+import numpy.typing
 
 
 def integral1_0l(a,b,l):
@@ -58,3 +59,29 @@ def deriv_11xr3(y,k,r):
     #Derivative (in relation to y) of 
     #1/(1+k*(y+r)^3)
     return -3*k*(y+r)**2/((k*(y+r)**3+1)**2)
+
+
+
+def sigmoid(x: numpy.typing.ArrayLike) -> numpy.typing.ArrayLike:
+    f = lambda x : 1/(1+np.exp(-x))
+    g = lambda x : 0*x
+    return np.piecewise(x, [x<-50, x>=-50], [g, f])
+
+
+def default_bump_function(x: numpy.typing.ArrayLike) -> numpy.typing.ArrayLike:
+    y = np.piecewise(x,
+                     [np.abs(x) < 1 - 1e-6, np.abs(x) >= 1 - 1e-6],
+                     [lambda x : np.exp(-1/(1-x**2)), lambda x : 0.0*x])
+    return y/np.exp(-1)
+
+
+def smooth_transition(x: numpy.typing.ArrayLike, t: float, delta: float) -> numpy.typing.ArrayLike:
+    #[transition-delta, transition+delta] -> [0, 1]
+    lb = t - delta
+    ub = t + delta
+    transition_scaling = lambda x : (x - lb)/(ub - lb)
+    transition_function = lambda x : default_bump_function(transition_scaling(x))
+    y = np.piecewise(x,
+                     [x < lb, (x >= lb) & (x <= ub), x > ub],
+                     [lambda x : 0.0*x + 1.0, transition_function, lambda x : 0.0*x])
+    return y

@@ -5,10 +5,14 @@ import numpy as np
 
 from scipy import interpolate
 
+from .source import momentinversion
+
 
 class ResultInterpolator():
-    def __init__(self, recorder : Dict[float, Dict[str, np.typing.ArrayLike]]):
+    def __init__(self, recorder : Dict[float, Dict[str, np.typing.ArrayLike]],
+                 length_based_formulation : bool = False):
         self.recorder = recorder
+        self.length_based_formulation = length_based_formulation
         
     def result_keys(self) -> List[str]:
         return self.base_keys() + self.derived_keys()
@@ -46,12 +50,21 @@ class ResultInterpolator():
             elif k == 'ionic_deposition_proportion':
                 return d['source_ionic_mass']/(d['source_ionic_mass'] + d['source_particle_mass'])
             elif k == 'mean_volume':
-                return d['moments'][1]/d['moments'][0]
+                if self.length_based_formulation:
+                    l3 = d['moments'][3]/d['moments'][0]
+                    return np.pi/6*l3
+                else:
+                    return d['moments'][1]/d['moments'][0]
             elif k == 'number_particles':
                 return d['moments'][0]
             elif k == 'mean_diameter_estimate':
-                v = d['moments'][1]/d['moments'][0]
-                return (3/(4*np.pi)*v)**(1.0/3)
+                if self.length_based_formulation:
+                    return  d['moments'][1]/d['moments'][0]
+                else:
+                    v = d['moments'][1]/d['moments'][0]
+                    return (3/(4*np.pi)*v)**(1.0/3)
+            elif k == 'chebyshev':
+                return np.hstack(momentinversion.ZetaChebyshev(d['moments']))
             else:
                 raise KeyError
         else:
@@ -66,4 +79,5 @@ class ResultInterpolator():
                 'ionic_deposition_proportion',
                 'mean_volume',
                 'number_particles',
-                'mean_diameter_estimate']
+                'mean_diameter_estimate',
+                'chebyshev']

@@ -7,7 +7,7 @@ import numpy.typing
 from scipy import constants
 from scipy import integrate
 
-from . import integrals
+from . import auxfunctions
 
 
 SingleCallable = Callable[[float, List[Any]], float]
@@ -84,7 +84,7 @@ def particle_deposition_efficiency(radius : float,
                                                     dl_thickness)
     def inner_integrand(y):
         potential_term = potential_function(y)/(KBOLTZ*temp)
-        radius_term = integrals.deriv_11xr3(y,diffusion_ratio,radius)
+        radius_term = auxfunctions.deriv_11xr3(y,diffusion_ratio,radius)
         return potential_term*radius_term
 
     def outer_integrand(y):
@@ -100,10 +100,10 @@ def particle_deposition_efficiency(radius : float,
                                INTEGRATION_ZERO,
                                max_interaction_distance,
                                1e60)
-    term2 = -integrals.integral2_0l(brownian_diffusion_term,
-                                    turbulent_diffusion_term,
-                                    radius,
-                                    max_interaction_distance)
+    term2 = -auxfunctions.integral2_0l(brownian_diffusion_term,
+                                       turbulent_diffusion_term,
+                                       radius,
+                                       max_interaction_distance)
     wd = term1 + term2
     return wd
 

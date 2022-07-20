@@ -43,7 +43,8 @@ class StationaryPipeSourceFunction():
                  wall_phases: MineralPhase = ['Calcite'],
                  wall_reactions: WallReactions = None,
                  bulk_phases: MineralPhase = ['Calcite'],
-                 nmoments: int = 2):
+                 nmoments: int = 2,
+                 length_based_formulation: bool=False):
         """
 
         Parameters
@@ -70,8 +71,12 @@ class StationaryPipeSourceFunction():
             DESCRIPTION. The default is None.
         bulk_phases : MineralPhase, optional
             Mineral phases at the bulk. The default is ['Calcite'].
-        nmoments: int, optional
+        nmoments : int, optional
             Number of moments to be considered. The default is 2.
+        length_based_formulation : bool, optional
+            Whether we are using a length-based formulation for
+            the method of moments. False means a volume-based formulation.
+            The default is False.
         """
         self.interface_system = interface_system  # The interface system for calculating chemical balances
         self.nmoments = nmoments  # Number of moments to be considered
@@ -88,7 +93,9 @@ class StationaryPipeSourceFunction():
         self.set_pressure_function(pressure, pressure_model)
         self.bulk_phases = bulk_phases  # Phases at the bulk
         self.wall_phases = wall_phases  # Phases at the wall
-
+        
+        self.length_based_formulation = length_based_formulation
+        
         self.has_ionic_deposition = True
         self.has_nucleation = True
         self.has_agglomeration = True
@@ -104,6 +111,9 @@ class StationaryPipeSourceFunction():
         self.sphere_initial_guess = 'bulk'
         self.roughness_wall_correction = 0.0 #Experimental variable
         self.turbulent_agglomeration_correction = 1.0 #Experimental variable
+        self.k_turbophoresis = 0.0 #Experimental variable
+        self.agglomeration_memoizers = None
+        self.particle_deposition_memoizers = None
         
         self.permanent_recorder = dict()
         self.temporary_recorder = dict()
@@ -138,8 +148,10 @@ class StationaryPipeSourceFunction():
         TKw = self.wall_temperature_function(pos)  # Temperature at wall
         elements_balance = self.get_elements_balance_dict(
             input_dict['elements'], TKb)  # Get elements balance
-        vrepr = moments[1]/moments[0]
-
+        if self.volume_based_formulation:
+            vrepr = moments[1]/moments[0]
+        else:
+            vrepr = moments[3]/moments[0]
         pressure = self.pressure_function(pos)  # Pressure at bulk
         sol_bulk = self._solve_bulk_equilibrium(
             elements_balance, TKb, pressure)  # Solve bulk chemical equilibrium
@@ -154,8 +166,15 @@ class StationaryPipeSourceFunction():
                 if np.all(moments == 0.0):  # Special case: zero initial particles
                     vols = np.ones(self.nmoments//2)*1e-20
                     weights = (np.arange(self.nmoments//2)+1)*1e-30
+                    if self.length_based_formulation:
+                        lengths = (6/np.pi*vols)**(1.0/3)
+                        
                 else:
-                    vols, weights = momentinversion.ZetaChebyshev(moments)
+                    if self.volume_based_formulation:
+                        vols, weights = momentinversion.ZetaChebyshev(moments)
+                    else:
+                        lengths, weights = momentinversion.ZetaChebyshev(moments)
+                        vols = np.pi/6*lengths**3 #Assume spherical particles
             try:
                 assert np.all(vols >= 0.) & np.all(
                     weights >= 0.)  # Asserts everything is okay
@@ -228,7 +247,7 @@ class StationaryPipeSourceFunction():
         self.make_temporary_record("source_particle_mass",
                                    0.0 if not self.has_particle_deposition else source_particle_mass)
         self.make_temporary_record("moments", moments)
-        self.make_temporary_record("elements", elements_balance)
+        self.make_temporary_record_from_dict(elements_balance, 'element_')
         self.make_temporary_record("source_elements", output_dict["elements"])
         self.make_temporary_record("source_moments", output_dict["moments"])
         return output_vector
@@ -305,7 +324,11 @@ class StationaryPipeSourceFunction():
             rate, vol = rates_and_volumes[phase]
             element_source_vector += - \
                 elements_balance_vector[:, i]/molar_mass*density*rate*vol
-            moments_source_vector += rate*vol**self.kmoments
+            if self.volume_based_formulation:
+                moments_source_vector += rate*vol**self.kmoments
+            else:
+                length = (6/np.pi*vol)**(1.0/3)
+                moments_source_vector += rate*length**self.kmoments
         return element_source_vector, moments_source_vector
 
     def agglomeration_sources(self, vols: np.ndarray, weights: np.ndarray,
@@ -381,12 +404,19 @@ class StationaryPipeSourceFunction():
         weights_n11, weights_1n1 = weights.reshape(
             -1, 1, 1), weights.reshape(1, -1, 1)
         weights_matrix = weights_n11*weights_1n1  # (n,n,1)
-        vols_matrix = 0.5*((vols_n11 + vols_1n1)**self.kmoments -
-                           2*vols_1n1**self.kmoments)  # (n,n,k)
-        agg_tensor = weights_matrix*vols_matrix*agglomeration_kernel  # (n,n,k)
-        source_agg = agg_tensor.sum(axis=-2).sum(axis=-2)  # (k,)
-        # First moment variaton due to coag is analytically zero.
-        source_agg[1] = 0.0
+        if self.volume_based_formulation:
+            vols_matrix = 0.5*((vols_n11 + vols_1n1)**self.kmoments -
+                               2*vols_1n1**self.kmoments)  # (n,n,k)
+            agg_tensor = weights_matrix*vols_matrix*agglomeration_kernel  # (n,n,k)
+            source_agg = agg_tensor.sum(axis=-2).sum(axis=-2)  # (k,)
+            # First moment variaton due to coag is analytically zero.
+            source_agg[1] = 0.0
+        else:
+            length_n11, length_1n1 = (6/np.pi*vols_n11)**(1.0/3), (6/np.pi*vols_1n1)**(1.0/3)
+            length_matrix = 0.5*((length_n11**3 + length_1n1**3)**(self.kmoments/3) - 
+                                 2*length_n11**self.kmoments)
+            agg_tensor = weights_matrix*length_matrix*agglomeration_kernel
+            source_agg = agg_tensor.sum(axis=-2).sum(axis=-2)
         if self.nzeroagg is not None and self.nmoments > self.nzeroagg:
             source_agg = np.hstack([source_agg[:self.nzeroagg],
                                     np.zeros(self.nmoments-self.num_zero_coag), ])
@@ -428,12 +458,15 @@ class StationaryPipeSourceFunction():
         """
         dynamic_viscosity = flowproperties.water_dynamic_viscosity(TK)
         kinematic_viscosity = flowproperties.water_kinematic_viscosity(TK)
+        komolgorov_length = flowproperties.komolgorov_length(
+            flow_velocity, pipe_diameter, TK)
         shear_velocity = flowproperties.shear_velocity(
             flow_velocity, pipe_diameter, TK)
         bturb = constants.TURB_VISCOSITY_CONSTANT
         interactions = self.particle_deposition_interactions
         vdw_interactions = self.van_der_walls_interactions
         dl_interactions = self.double_layer_interactions
+        k_turbophoresis = self.k_turbophoresis
         if interactions:
             if len(self.bulk_phases) > 1:
                 warnings.warn(
@@ -454,6 +487,7 @@ class StationaryPipeSourceFunction():
             TK,
             dynamic_viscosity,
             kinematic_viscosity,
+            komolgorov_length,
             shear_velocity,
             bturb,
             vrepr,
@@ -462,11 +496,18 @@ class StationaryPipeSourceFunction():
             phi_dl=phi_dl,
             dl_thickness=debye_length,
             rcorrection=rcorrection,
+            k_turbophoresis=k_turbophoresis,
             interactions=interactions)
         kaux = self.kmoments.reshape(-1, 1)  # (k, 1)
-        particle_matrix = vols**kaux*particle_deposition_rate_vector*weights
-        source_moments_particle_deposition = -4 / \
-            pipe_diameter*particle_matrix.sum(axis=1)
+        if self.volume_based_formulation:
+            particle_matrix = vols**kaux*particle_deposition_rate_vector*weights
+            source_moments_particle_deposition = -4 / \
+                pipe_diameter*particle_matrix.sum(axis=1)
+        else:
+            lengths = (6/np.pi*vols)**(1.0/3)
+            particle_matrix = lengths**kaux*particle_deposition_rate_vector*weights
+            source_moments_particle_deposition = -4 / \
+                pipe_diameter*particle_matrix.sum(axis=1)
         _, solid_density, _ = self.single_bulk_phase_properties()
         source_mass_particle_deposition = np.pi*pipe_diameter*solid_density *\
             (particle_deposition_rate_vector*vols*weights).sum()
@@ -515,17 +556,24 @@ class StationaryPipeSourceFunction():
         elements_balance_vector = element_balance_vector[2:-1, :]
         # (n-1, 1) #zero-th moment source will be zero by definition
         k_aux = self.kmoments[1:].reshape(-1, 1)
-        source_moments_growth_ = (
-            k_aux*growth_rate_vector*vols**(k_aux - 1)*weights).sum(axis=-1)  # (n-1,)
-        source_moments_growth = np.hstack([0, source_moments_growth_])
-
+        if self.volume_based_formulation:
+            source_moments_growth_ = (
+                k_aux*growth_rate_vector*vols**(k_aux - 1)*weights).sum(axis=-1)  # (n-1,)
+            source_moments_growth = np.hstack([0, source_moments_growth_])
+    
+        else:
+            lengths = (6/np.pi*vols)**(1.0/3)
+            linear_growth_rate_vector = 2/np.pi*growth_rate_vector/(lengths**2)
+            source_moments_growth_ = (
+                k_aux*linear_growth_rate_vector*vols**(k_aux - 1)*weights).sum(axis=-1)
+            source_moments_growth = np.hstack([0, source_moments_growth_])
         source_elements_growth = np.zeros(elements_balance_vector.shape[0])
-        _, _, molar_vol = self.single_bulk_phase_properties()
         for i, phase in enumerate(self.bulk_phases):
+            _, _, molar_vol = self.single_bulk_phase_properties()
             phase_growth_rate_vector = growth_rate_vectors[i]
             source_elements_phase_growth = elements_balance_vector[:, i]*molar_vol*np.sum(
                 phase_growth_rate_vector*weights).sum()
-            source_elements_growth += source_elements_phase_growth
+            source_elements_growth += source_elements_phase_growth            
         return source_elements_growth, source_moments_growth
 
     def _solve_bulk_equilibrium(self, elements_balance: Dict[str, float],
@@ -745,10 +793,13 @@ class StationaryPipeSourceFunction():
         return _dict_hstack(d, self.solute_elements)
 
     def get_delta_moment_vector(self, nparticles: float, diamparticles: float) -> np.ndarray:
-        radiusparticles = diamparticles/2
-        volparticles = 4.0/3*np.pi*radiusparticles**3
-        moments = [nparticles * volparticles **
-                   k for k in np.arange(self.nmoments)]
+        if self.length_based_formulation:
+            moments = [nparticles*diamparticles**k for k in range(self.nmoments)]
+        else:
+            radiusparticles = diamparticles/2
+            volparticles = 4.0/3*np.pi*radiusparticles**3
+            moments = [nparticles * volparticles **
+                       k for k in np.arange(self.nmoments)]
         return np.array(moments)
 
     def get_concentration_moments_vector(self, elements_dict: Dict[str, np.ndarray],
@@ -794,6 +845,10 @@ class StationaryPipeSourceFunction():
     @property
     def kmoments(self):
         return np.arange(self.nmoments, dtype=float)
+
+    @property
+    def volume_based_formulation(self):
+        return not self.length_based_formulation
 
     def make_temporary_space_record(self, value: float):
         self.recorder_space_key = value
