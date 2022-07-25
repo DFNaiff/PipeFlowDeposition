@@ -36,7 +36,8 @@ def particle_deposition_efficiency(radius : float,
                                    max_interaction_distance : float,
                                    bturb : float = 9.5*1e-4,
                                    sct : float = 1.0,
-                                   rcorrection : float = 0.0) -> float:
+                                   rcorrection : float = 0.0,
+                                   diffusional_particle_point_approximation : bool = False) -> float:
     """
 
     Parameters

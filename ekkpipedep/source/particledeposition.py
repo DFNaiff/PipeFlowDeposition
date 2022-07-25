@@ -17,6 +17,8 @@ def particle_deposition_rate(x : np.ndarray,
                              kinematic_viscosity : float,
                              komolgorov_length : float,
                              shear_velocity : float,
+                             fluid_density : float,
+                             particle_density : float,
                              bturb : float,
                              vrepr : float,
                              sct : float = 1.0,
@@ -25,9 +27,10 @@ def particle_deposition_rate(x : np.ndarray,
                              dl_thickness : Optional[float] = None,
                              phi_dl : Optional[float] = None,
                              rcorrection : float = 0.0,
-                             k_turbophoresis : float = 0.0,
-                             komolgorov_adjustment : float = 0.25,
+                             turbophoretic_constant : float = 0.0,
+                             transition_width_factor : float = 0.25,
                              adjustment_factor : Optional[float] = 1.0,
+                             diffusional_particle_point_approximation = False,
                              interactions : Optional[float] = False) -> np.ndarray:
     """
     Calculate deposition rate
@@ -46,6 +49,10 @@ def particle_deposition_rate(x : np.ndarray,
         Komolgorov length (m)
     shear_velocity : float
         Shear velocity (m/s)
+    fluid_density : float
+        Fluid density (kg/m3)
+    particle_density : float
+        Particle density (kg/m3)
     bturb : float
         Wall turbulent viscosity constant (dimensionless).
     vrepr : float
@@ -62,6 +69,12 @@ def particle_deposition_rate(x : np.ndarray,
         Electric potential at surface of particle and wall (V). The default is None
     rcorrection : float, optional.
         Hydrodynamic correction for rough surfaces. The default is 0.0.
+    turbophoretic_constant : float, optional.
+        Turbophoretic constant. The default is 0.0
+    transition_width_factor : float = 0.25,
+        Turbophoretic adjustment. The default is 0.0.
+    diffusional_particle_point_approximation : bool, optional
+        DESCRIBE
     interactions : Optional[float], optional
         Whether to consider interactions (default: True)
     
@@ -77,7 +90,10 @@ def particle_deposition_rate(x : np.ndarray,
     r = (3/(4*np.pi)*x)**(1.0/3)
     dbr = (KBOLTZ*temp)/(6*np.pi*dynamic_viscosity*r)
     kappa = b*shear_velocity**3/(kinematic_viscosity**2*sct)
-    d0 = 1/auxfunctions.integral2_0inf(dbr,kappa,r)
+    if not diffusional_particle_point_approximation:
+        d0 = 1/auxfunctions.integral2_0inf(dbr,kappa,r)
+    else:
+        d0 = 1/auxfunctions.integral1_0inf(dbr, kappa)
 
     #Calculate interactions
     wall_length = kinematic_viscosity/shear_velocity
@@ -96,9 +112,29 @@ def particle_deposition_rate(x : np.ndarray,
     else:
         wd = 1.0
         diffusional_deposition_rate = d0
-    turbophoretic_deposition_rate = k_turbophoresis*shear_velocity
-    transition_factor = auxfunctions.smooth_transition(2*r, komolgorov_length,
-                                                       komolgorov_length*komolgorov_adjustment)
+    turbophoretic_deposition_rate = turbophoretic_constant*shear_velocity
+
+    wall_stokes_number = 1.0/18*particle_density/fluid_density*\
+                            (shear_velocity*2*r/kinematic_viscosity)**2
+    lb_transition = 3*1e-1 #Young
+    ub_transition = 5.0 #Young
+    transition_factor = auxfunctions.smooth_transition_log(wall_stokes_number,
+                                                           lb_transition,
+                                                           ub_transition)
+    # wall_stokes_limit = 5.0
+    # transition_width = wall_stokes_limit*transition_width_factor
+    # transition_factor = auxfunctions.centered_smooth_transition(wall_stokes_number,
+    #                                                             wall_stokes_limit,
+    #                                                             transition_width)
+    # print(wall_stokes_number)
+    # print(transition_factor)
+    # transition_factor = auxfunctions.centered_smooth_transition(2*r,
+    #                                                             komolgorov_length,
+    #                                                             komolgorov_length*transition_width_factor)
+    # print(2*r)
+    # print(komolgorov_length)
+    # print(transition_factor)
+    # print('--')
     deposition_rate = transition_factor*diffusional_deposition_rate + \
                       (1 - transition_factor)*turbophoretic_deposition_rate
     deposition_rate *= adjustment_factor

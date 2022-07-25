@@ -462,6 +462,8 @@ class StationaryPipeSourceFunction():
             flow_velocity, pipe_diameter, TK)
         shear_velocity = flowproperties.shear_velocity(
             flow_velocity, pipe_diameter, TK)
+        fluid_density = flowproperties.water_density(TK)
+        _, solid_density, _ = self.single_bulk_phase_properties()
         bturb = constants.TURB_VISCOSITY_CONSTANT
         interactions = self.particle_deposition_interactions
         vdw_interactions = self.van_der_walls_interactions
@@ -489,6 +491,8 @@ class StationaryPipeSourceFunction():
             kinematic_viscosity,
             komolgorov_length,
             shear_velocity,
+            fluid_density,
+            solid_density,
             bturb,
             vrepr,
             hamaker=hamaker,
@@ -496,7 +500,7 @@ class StationaryPipeSourceFunction():
             phi_dl=phi_dl,
             dl_thickness=debye_length,
             rcorrection=rcorrection,
-            k_turbophoresis=k_turbophoresis,
+            turbophoretic_constant=k_turbophoresis,
             interactions=interactions)
         kaux = self.kmoments.reshape(-1, 1)  # (k, 1)
         if self.volume_based_formulation:

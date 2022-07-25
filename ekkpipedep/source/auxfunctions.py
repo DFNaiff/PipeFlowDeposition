@@ -75,13 +75,26 @@ def default_bump_function(x: numpy.typing.ArrayLike) -> numpy.typing.ArrayLike:
     return y/np.exp(-1)
 
 
-def smooth_transition(x: numpy.typing.ArrayLike, t: float, delta: float) -> numpy.typing.ArrayLike:
-    #[transition-delta, transition+delta] -> [0, 1]
-    lb = t - delta
-    ub = t + delta
+def smooth_transition(x: numpy.typing.ArrayLike,
+                        lb: float,
+                        ub: float) -> numpy.typing.ArrayLike:
     transition_scaling = lambda x : (x - lb)/(ub - lb)
     transition_function = lambda x : default_bump_function(transition_scaling(x))
     y = np.piecewise(x,
                      [x < lb, (x >= lb) & (x <= ub), x > ub],
                      [lambda x : 0.0*x + 1.0, transition_function, lambda x : 0.0*x])
     return y
+
+
+def centered_smooth_transition(x: numpy.typing.ArrayLike, t: float, delta: float) -> numpy.typing.ArrayLike:
+    #[transition-delta, transition+delta] -> [0, 1]
+    lb = t - delta
+    ub = t + delta
+    return smooth_transition(x, lb, ub)
+
+
+def smooth_transition_log(x: numpy.typing.ArrayLike,
+                          lb: float,
+                          ub: float) -> numpy.typing.ArrayLike:
+    return smooth_transition(np.log(x), np.log(lb), np.log(ub))
+    
