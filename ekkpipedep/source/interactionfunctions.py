@@ -68,7 +68,8 @@ def particle_deposition_efficiency(radius : float,
         Schmidt number (dimensionless). The default is 1.0.
     rcorrection : float, optional
         Hydrodynamic correction for rough surfaces. The default is 0.0.
-    
+    diffusional_particle_point_approximation : bool, optional
+        DESCRIBE
     Returns
     -------
     float
@@ -94,17 +95,25 @@ def particle_deposition_efficiency(radius : float,
         radius_term = (1+diffusion_ratio*(y+radius)**3)
         exp_term = potential_term/radius_term - inner_integral
         hydro_term = gfunction_particle_wall(y/radius, rcorrection)
-        outer_radius_term = (1/(1+diffusion_ratio*(y+radius)**3))
+        if not diffusional_particle_point_approximation:
+            outer_radius_term = (1/(1+diffusion_ratio*(y+radius)**3))
+        else:
+            outer_radius_term = 1/(1+diffusion_ratio*y**3)
         integrand = hydro_term/brownian_diffusion_term*outer_radius_term*np.exp(exp_term)
         return integrand
     term1 = warned_integration(outer_integrand,
                                INTEGRATION_ZERO,
                                max_interaction_distance,
                                1e60)
-    term2 = -auxfunctions.integral2_0l(brownian_diffusion_term,
-                                       turbulent_diffusion_term,
-                                       radius,
-                                       max_interaction_distance)
+    if not diffusional_particle_point_approximation:
+        term2 = -auxfunctions.integral2_0l(brownian_diffusion_term,
+                                           turbulent_diffusion_term,
+                                           radius,
+                                           max_interaction_distance)
+    else:
+        term2 = -auxfunctions.integral1_0l(brownian_diffusion_term,
+                                           turbulent_diffusion_term,
+                                           max_interaction_distance)
     wd = term1 + term2
     return wd
 

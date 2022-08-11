@@ -116,11 +116,12 @@ def particle_deposition_rate(x : np.ndarray,
 
     wall_stokes_number = 1.0/18*particle_density/fluid_density*\
                             (shear_velocity*2*r/kinematic_viscosity)**2
-    lb_transition = 3*1e-1 #Young
-    ub_transition = 5.0 #Young
-    transition_factor = auxfunctions.smooth_transition_log(wall_stokes_number,
-                                                           lb_transition,
-                                                           ub_transition)
+    lb_transition = 1e-1 #Young
+    ub_transition = 3*1e-1 #Young
+    transition_factor = auxfunctions.smooth_transition(wall_stokes_number,
+                                                       lb_transition,
+                                                       ub_transition)
+    transition_factor = 0.0
     # wall_stokes_limit = 5.0
     # transition_width = wall_stokes_limit*transition_width_factor
     # transition_factor = auxfunctions.centered_smooth_transition(wall_stokes_number,
